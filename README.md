@@ -100,7 +100,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Contact
 
-For any questions or further information, please contact [Your Name](mailto:your.email@example.com).
+For any questions or further information, please contact [LowLevelForest](mailto:lowlevelforest@gmail.com).
 
 ```
 
