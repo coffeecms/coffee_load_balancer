@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,11 +24,13 @@ type Server struct {
 
 // LoadBalancer structure
 type LoadBalancer struct {
-	servers       []Server
-	algorithm     string
-	mutex         sync.Mutex
-	current       int
-	connections   map[string]int // Number of current connections for each server
+	servers         []Server
+	algorithm       string
+	mutex           sync.Mutex
+	current         int
+	connections     map[string]int // Number of current connections for each server
+	rateLimit       int             // Requests per second
+	shutdownChannel chan struct{}
 }
 
 // Load server list from a file
@@ -79,8 +82,22 @@ func (lb *LoadBalancer) ReloadServersPeriodically(filename string, interval time
 			if err != nil {
 				log.Printf("Error reloading servers: %v", err)
 			}
+		case <-lb.shutdownChannel:
+			return
 		}
 	}
+}
+
+// Rate limiting middleware
+func (lb *LoadBalancer) RateLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(time.Second / time.Duration(lb.rateLimit)):
+			next.ServeHTTP(w, r)
+		default:
+			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+		}
+	})
 }
 
 // Select the next server based on the algorithm
@@ -166,9 +183,16 @@ func (lb *LoadBalancer) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	lb.connections[server.Address+":"+server.Port]--
 }
 
+// Handle requests using goroutines
+func (lb *LoadBalancer) requestHandler(w http.ResponseWriter, r *http.Request) {
+	go lb.HandleRequest(w, r)
+}
+
 func main() {
 	lb := &LoadBalancer{
-		algorithm: "round_robin", // Choose algorithm as needed
+		algorithm:       "round_robin", // Choose algorithm as needed
+		rateLimit:       1000,          // Example rate limit: 1000 requests per second
+		shutdownChannel: make(chan struct{}),
 	}
 
 	err := lb.LoadServers("servers.conf")
@@ -179,23 +203,29 @@ func main() {
 	go lb.ReloadServersPeriodically("servers.conf", 5*time.Second)
 
 	// HTTP server
-	go func() {
-		log.Println("Starting HTTP server on port 8080...")
-		err := http.ListenAndServe(":8080", http.HandlerFunc(lb.HandleRequest))
-		if err != nil {
-			log.Fatalf("HTTP server error: %v", err)
-		}
-	}()
+	//go func() {
+	//	http.Handle("/", lb.RateLimit(http.HandlerFunc(lb.requestHandler)))
+	//	log.Println("Starting HTTP server on port 8080...")
+	//	err := http.ListenAndServe(":8080", nil)
+	//	if err != nil {
+	//		log.Fatalf("HTTP server error: %v", err)
+	//	}
+	//}()
 
 	// HTTPS server
 	go func() {
+		http.Handle("/", lb.RateLimit(http.HandlerFunc(lb.requestHandler)))
 		log.Println("Starting HTTPS server on port 443...")
-		err := http.ListenAndServeTLS(":443", "lowlevelforest.com.crt", "lowlevelforest.com.key", http.HandlerFunc(lb.HandleRequest))
+		err := http.ListenAndServeTLS(":443", "lowlevelforest.com.crt", "lowlevelforest.com.key", nil)
 		if err != nil {
 			log.Fatalf("HTTPS server error: %v", err)
 		}
 	}()
 
-	// Keep the application running
-	select {}
+	// Graceful shutdown handling
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt)
+	<-stop
+	close(lb.shutdownChannel)
+	log.Println("Shutting down gracefully...")
 }
