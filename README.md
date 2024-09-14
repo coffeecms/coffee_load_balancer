@@ -1,48 +1,58 @@
-
 # Load Balancer System in Go - https://blog.lowlevelforest.com/
 
 ## Overview
 
-This is a simple yet robust load balancer system implemented in Go. The load balancer supports several request distribution algorithms including:
+This Go-based load balancer is designed to distribute incoming HTTP and HTTPS requests across multiple backend servers using various load balancing algorithms. The system supports:
 
-- **Round Robin**: Distributes requests sequentially to each server.
-- **Least Connections**: Routes requests to the server with the fewest connections.
-- **Weighted Round Robin**: Distributes requests based on the server's weight.
-- **IP Hash**: Routes requests based on the client's IP address (currently a placeholder).
+- **Round Robin**: Sequential distribution of requests.
+- **Least Connections**: Routing requests to the server with the fewest active connections.
+- **Weighted Round Robin**: Distribution based on server weights.
+- **IP Hash**: (Placeholder for future implementation) Routes requests based on the client's IP address.
 
-The system automatically reloads the server list from a configuration file every 5 seconds and supports handling various types of HTTP requests (GET, POST, PUT, DELETE, etc.).
+The system can handle a large number of connections and automatically reloads the server list every 5 seconds from a configuration file.
 
 ## Features
 
-- **Dynamic Server List**: Automatically reloads server configurations from `servers.conf`.
-- **Load Balancing Algorithms**: Includes Round Robin, Least Connections, Weighted Round Robin, and IP Hash.
-- **Scalable**: Designed to handle a large number of concurrent connections efficiently.
+- **Dual Protocol Support**: Handles both HTTP and HTTPS requests.
+- **Dynamic Server Management**: Automatically reloads server configurations.
+- **Multiple Load Balancing Algorithms**: Choose from Round Robin, Least Connections, Weighted Round Robin, and IP Hash.
+- **Scalable**: Designed to handle high traffic and numerous concurrent connections.
 
 ## Prerequisites
 
-- Go 1.18 or higher
-- Basic knowledge of Go and HTTP servers
+- **Go 1.18+**: Ensure Go is installed on your machine. Download it from [golang.org](https://golang.org/dl/).
+- **SSL Certificates**: For HTTPS support, you'll need SSL certificate files.
 
 ## Installation
 
-1. **Clone the repository:**
+1. **Clone the Repository**
 
    ```sh
    git clone https://github.com/coffeecms/coffee_load_balancer.git
    cd coffee_load_balancer
    ```
 
-2. **Build the application:**
+2. **Build the Application**
 
    ```sh
    go build -o coffee_load_balancer main.go
    ```
 
+3. **Generate SSL Certificates (for HTTPS)**
+
+   If you don't have SSL certificates, generate self-signed certificates for testing:
+
+   ```sh
+   openssl req -newkey rsa:2048 -nodes -keyout server.key -x509 -days 365 -out server.crt
+   ```
+
+   Place `server.crt` and `server.key` in the same directory as the built application.
+
 ## Configuration
 
-1. **Create a `servers.conf` file**:
+1. **Server List Configuration**
 
-   The `servers.conf` file should contain a list of servers with optional weights. Each line should have the format:
+   Create a `servers.conf` file in the project directory. This file should list the backend servers with optional weights, one per line:
 
    ```
    <server_address>:<weight>
@@ -56,43 +66,62 @@ The system automatically reloads the server list from a configuration file every
    192.168.1.3
    ```
 
-   - `<server_address>`: The IP address or domain of the server.
-   - `<weight>`: (Optional) The weight of the server for weighted round-robin algorithm.
+   - `<server_address>`: The IP address or hostname of the backend server.
+   - `<weight>`: (Optional) The weight of the server for the Weighted Round Robin algorithm.
 
-2. **Choose a load balancing algorithm**:
+2. **Load Balancing Algorithm**
 
-   Update the `algorithm` field in the `main()` function of `main.go` to one of the following:
+   Edit the `algorithm` field in the `main()` function of `main.go` to select the load balancing algorithm:
 
    - `"round_robin"`
    - `"least_connections"`
    - `"weighted_round_robin"`
    - `"ip_hash"`
 
+   *Note: IP Hashing is a placeholder for future implementation.*
+
 ## Usage
 
-1. **Run the load balancer:**
+1. **Run the Load Balancer**
+
+   Start the load balancer application:
 
    ```sh
    ./coffee_load_balancer
    ```
 
-2. **Send HTTP requests to the load balancer**:
+   The load balancer will start two servers:
 
-   The load balancer will forward requests to the appropriate backend server based on the selected algorithm. You can test it using `curl` or any HTTP client:
+   - **HTTP**: Listens on port `8080`
+   - **HTTPS**: Listens on port `8443`
 
-   ```sh
-   curl http://localhost:8080/your-endpoint
-   ```
+2. **Sending Requests**
+
+   - **HTTP Requests**: Use the HTTP port for regular requests:
+   
+     ```sh
+     curl http://localhost:8080/your-endpoint
+     ```
+
+   - **HTTPS Requests**: Use the HTTPS port for secure requests. You may need to bypass SSL certificate validation for self-signed certificates:
+   
+     ```sh
+     curl https://localhost:8443/your-endpoint --insecure
+     ```
+
+3. **Automatic Server List Reload**
+
+   The system will automatically reload the server list every 5 seconds. Ensure `servers.conf` is updated with the latest backend servers as needed.
 
 ## Notes
 
-- Ensure that your backend servers are reachable and properly configured to handle requests forwarded by the load balancer.
-- The IP Hashing algorithm is a placeholder and not yet implemented. You can extend the code to support it if needed.
-- The load balancer is designed to handle a large number of connections, but make sure your hardware and network infrastructure are scaled accordingly.
+- **SSL Certificates**: For production, use certificates from a trusted Certificate Authority (CA). Update the `server.crt` and `server.key` file names in the code if different.
+- **Firewall and Network Configuration**: Ensure the ports used (8080 for HTTP and 8443 for HTTPS) are open and accessible.
+- **Scaling**: The load balancer is designed for high concurrency, but ensure your backend servers and infrastructure can handle the load.
 
 ## Contributing
 
-If you have suggestions or improvements, feel free to open an issue or submit a pull request.
+Contributions are welcome! Please open an issue or submit a pull request if you have suggestions or improvements.
 
 ## License
 
@@ -100,21 +129,19 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Contact
 
-For any questions or further information, please contact [LowLevelForest](mailto:lowlevelforest@gmail.com).
+For questions or further information, please contact [LowLevelForest](mailto:lowlevelforest@gmail.com).
 
 ```
 
-### Key Points:
+### Key Sections:
 
-- **Overview**: Brief introduction to what the system does.
-- **Features**: Highlights the key features of the load balancer.
-- **Prerequisites**: Lists the requirements to run the system.
-- **Installation**: Step-by-step guide to clone, build, and set up the system.
-- **Configuration**: Instructions on how to configure the `servers.conf` file and select the load balancing algorithm.
-- **Usage**: How to run the application and test it.
-- **Notes**: Additional information about the system's capabilities and limitations.
-- **Contributing**: Encourages contributions and provides a way to get in touch.
-- **License**: Specifies the license for the project.
-- **Contact**: Provides contact information for further queries.
-
-Feel free to adjust any sections based on your specific needs or additional features.
+- **Overview**: Provides a brief description of the load balancer and its features.
+- **Features**: Lists the capabilities of the system.
+- **Prerequisites**: Details the requirements to run the system.
+- **Installation**: Step-by-step guide for cloning the repo, building the application, and generating SSL certificates.
+- **Configuration**: Instructions for setting up the `servers.conf` file and selecting the load balancing algorithm.
+- **Usage**: How to run the application and send requests.
+- **Notes**: Additional considerations and tips for production use.
+- **Contributing**: Encourages community involvement.
+- **License**: License details.
+- **Contact**: Provides a way to reach out for further information.

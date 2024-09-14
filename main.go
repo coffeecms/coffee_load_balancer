@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand" 
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -14,22 +14,22 @@ import (
 	"time"
 )
 
-
+// Cấu trúc để lưu thông tin máy chủ
 type Server struct {
 	Address string
 	Weight  int
 }
 
-
+// Load balancer cấu trúc
 type LoadBalancer struct {
 	servers       []Server
 	algorithm     string
 	mutex         sync.Mutex
 	current       int
-	connections   map[string]int
+	connections   map[string]int // Số lượng kết nối hiện tại cho mỗi máy chủ
 }
 
-
+// Đọc danh sách máy chủ từ file
 func (lb *LoadBalancer) LoadServers(filename string) error {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -61,7 +61,7 @@ func (lb *LoadBalancer) LoadServers(filename string) error {
 	return nil
 }
 
-
+// Tự động tải lại danh sách máy chủ sau mỗi khoảng thời gian
 func (lb *LoadBalancer) ReloadServersPeriodically(filename string, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -78,6 +78,7 @@ func (lb *LoadBalancer) ReloadServersPeriodically(filename string, interval time
 	}
 }
 
+// Chọn máy chủ tiếp theo dựa trên thuật toán
 func (lb *LoadBalancer) NextServer() *Server {
 	lb.mutex.Lock()
 	defer lb.mutex.Unlock()
@@ -116,6 +117,7 @@ func (lb *LoadBalancer) NextServer() *Server {
 	return server
 }
 
+// Xử lý yêu cầu và chuyển tiếp đến máy chủ backend
 func (lb *LoadBalancer) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	server := lb.NextServer()
 	if server == nil {
@@ -123,12 +125,14 @@ func (lb *LoadBalancer) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Tạo một yêu cầu mới để gửi đến máy chủ backend
 	req, err := http.NewRequest(r.Method, fmt.Sprintf("http://%s%s", server.Address, r.RequestURI), r.Body)
 	if err != nil {
 		http.Error(w, "Error creating request", http.StatusInternalServerError)
 		return
 	}
 
+	// Sao chép các header từ yêu cầu gốc
 	req.Header = r.Header
 
 	client := &http.Client{}
@@ -139,6 +143,7 @@ func (lb *LoadBalancer) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
+	// Cập nhật số lượng kết nối cho máy chủ
 	lb.connections[server.Address]++
 
 	// Sao chép các header từ phản hồi của máy chủ backend
@@ -150,12 +155,13 @@ func (lb *LoadBalancer) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
 
+	// Giảm số lượng kết nối sau khi xử lý xong
 	lb.connections[server.Address]--
 }
 
 func main() {
 	lb := &LoadBalancer{
-		algorithm: "round_robin", // Or "least_connections", "weighted_round_robin", "ip_hash"
+		algorithm: "round_robin", // Hoặc "least_connections", "weighted_round_robin", "ip_hash"
 	}
 
 	err := lb.LoadServers("servers.conf")
@@ -165,6 +171,24 @@ func main() {
 
 	go lb.ReloadServersPeriodically("servers.conf", 5*time.Second)
 
-	http.HandleFunc("/", lb.HandleRequest)
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	// HTTP server
+	go func() {
+		log.Println("Starting HTTP server on port 8080...")
+		err := http.ListenAndServe(":8080", http.HandlerFunc(lb.HandleRequest))
+		if err != nil {
+			log.Fatalf("HTTP server error: %v", err)
+		}
+	}()
+
+	// HTTPS server
+	go func() {
+		log.Println("Starting HTTPS server on port 8443...")
+		err := http.ListenAndServeTLS(":8443", "server.crt", "server.key", http.HandlerFunc(lb.HandleRequest))
+		if err != nil {
+			log.Fatalf("HTTPS server error: %v", err)
+		}
+	}()
+
+	// Keep the application running
+	select {}
 }
