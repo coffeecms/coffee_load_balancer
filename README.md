@@ -1,4 +1,4 @@
-```markdown
+
 # Load Balancer System in Go - https://blog.lowlevelforest.com/
 
 ## Overview
