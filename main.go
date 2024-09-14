@@ -14,22 +14,23 @@ import (
 	"time"
 )
 
-// Cấu trúc để lưu thông tin máy chủ
+// Server structure to hold server information
 type Server struct {
-	Address string
-	Weight  int
+	Address string // e.g., "10.220.3.1"
+	Port    string // e.g., "23252"
+	Weight  int    // e.g., 10
 }
 
-// Load balancer cấu trúc
+// LoadBalancer structure
 type LoadBalancer struct {
 	servers       []Server
 	algorithm     string
 	mutex         sync.Mutex
 	current       int
-	connections   map[string]int // Số lượng kết nối hiện tại cho mỗi máy chủ
+	connections   map[string]int // Number of current connections for each server
 }
 
-// Đọc danh sách máy chủ từ file
+// Load server list from a file
 func (lb *LoadBalancer) LoadServers(filename string) error {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -45,12 +46,16 @@ func (lb *LoadBalancer) LoadServers(filename string) error {
 			continue
 		}
 		parts := strings.Split(line, ":")
-		address := parts[0]
-		weight := 1
-		if len(parts) > 1 {
-			weight, _ = strconv.Atoi(parts[1])
+		if len(parts) < 2 {
+			continue // Skip malformed lines
 		}
-		servers = append(servers, Server{Address: address, Weight: weight})
+		address := parts[0]
+		port := parts[1]
+		weight := 1
+		if len(parts) > 2 {
+			weight, _ = strconv.Atoi(parts[2])
+		}
+		servers = append(servers, Server{Address: address, Port: port, Weight: weight})
 	}
 	if err := scanner.Err(); err != nil {
 		return err
@@ -61,7 +66,7 @@ func (lb *LoadBalancer) LoadServers(filename string) error {
 	return nil
 }
 
-// Tự động tải lại danh sách máy chủ sau mỗi khoảng thời gian
+// Automatically reload server list periodically
 func (lb *LoadBalancer) ReloadServersPeriodically(filename string, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -78,7 +83,7 @@ func (lb *LoadBalancer) ReloadServersPeriodically(filename string, interval time
 	}
 }
 
-// Chọn máy chủ tiếp theo dựa trên thuật toán
+// Select the next server based on the algorithm
 func (lb *LoadBalancer) NextServer() *Server {
 	lb.mutex.Lock()
 	defer lb.mutex.Unlock()
@@ -92,8 +97,8 @@ func (lb *LoadBalancer) NextServer() *Server {
 	case "least_connections":
 		minConnections := int(^uint(0) >> 1) // Max int value
 		for _, s := range lb.servers {
-			if lb.connections[s.Address] < minConnections {
-				minConnections = lb.connections[s.Address]
+			if lb.connections[s.Address+":"+s.Port] < minConnections {
+				minConnections = lb.connections[s.Address+":"+s.Port]
 				server = &s
 			}
 		}
@@ -117,7 +122,7 @@ func (lb *LoadBalancer) NextServer() *Server {
 	return server
 }
 
-// Xử lý yêu cầu và chuyển tiếp đến máy chủ backend
+// Handle incoming requests and forward them to backend servers
 func (lb *LoadBalancer) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	server := lb.NextServer()
 	if server == nil {
@@ -125,14 +130,16 @@ func (lb *LoadBalancer) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Tạo một yêu cầu mới để gửi đến máy chủ backend
-	req, err := http.NewRequest(r.Method, fmt.Sprintf("http://%s%s", server.Address, r.RequestURI), r.Body)
+	serverURL := fmt.Sprintf("http://%s:%s", server.Address, server.Port)
+
+	// Create a new request to forward to the backend server
+	req, err := http.NewRequest(r.Method, fmt.Sprintf("%s%s", serverURL, r.RequestURI), r.Body)
 	if err != nil {
 		http.Error(w, "Error creating request", http.StatusInternalServerError)
 		return
 	}
 
-	// Sao chép các header từ yêu cầu gốc
+	// Copy headers from the original request
 	req.Header = r.Header
 
 	client := &http.Client{}
@@ -143,10 +150,10 @@ func (lb *LoadBalancer) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// Cập nhật số lượng kết nối cho máy chủ
-	lb.connections[server.Address]++
+	// Update the number of connections for the server
+	lb.connections[server.Address+":"+server.Port]++
 
-	// Sao chép các header từ phản hồi của máy chủ backend
+	// Copy headers from the backend server response
 	for key, values := range resp.Header {
 		for _, value := range values {
 			w.Header().Add(key, value)
@@ -155,13 +162,13 @@ func (lb *LoadBalancer) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
 
-	// Giảm số lượng kết nối sau khi xử lý xong
-	lb.connections[server.Address]--
+	// Decrease the number of connections after processing
+	lb.connections[server.Address+":"+server.Port]--
 }
 
 func main() {
 	lb := &LoadBalancer{
-		algorithm: "round_robin", // Hoặc "least_connections", "weighted_round_robin", "ip_hash"
+		algorithm: "round_robin", // Choose algorithm as needed
 	}
 
 	err := lb.LoadServers("servers.conf")
@@ -182,8 +189,8 @@ func main() {
 
 	// HTTPS server
 	go func() {
-		log.Println("Starting HTTPS server on port 8443...")
-		err := http.ListenAndServeTLS(":8443", "server.crt", "server.key", http.HandlerFunc(lb.HandleRequest))
+		log.Println("Starting HTTPS server on port 443...")
+		err := http.ListenAndServeTLS(":443", "lowlevelforest.com.crt", "lowlevelforest.com.key", http.HandlerFunc(lb.HandleRequest))
 		if err != nil {
 			log.Fatalf("HTTPS server error: %v", err)
 		}

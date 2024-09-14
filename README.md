@@ -2,14 +2,14 @@
 
 ## Overview
 
-This Go-based load balancer is designed to distribute incoming HTTP and HTTPS requests across multiple backend servers using various load balancing algorithms. The system supports:
+This Go-based load balancer distributes incoming HTTP and HTTPS requests across multiple backend servers using various load balancing algorithms. The system supports:
 
-- **Round Robin**: Sequential distribution of requests.
-- **Least Connections**: Routing requests to the server with the fewest active connections.
-- **Weighted Round Robin**: Distribution based on server weights.
+- **Round Robin**: Distributes requests sequentially.
+- **Least Connections**: Routes requests to the server with the fewest active connections.
+- **Weighted Round Robin**: Distributes requests based on server weights.
 - **IP Hash**: (Placeholder for future implementation) Routes requests based on the client's IP address.
 
-The system can handle a large number of connections and automatically reloads the server list every 5 seconds from a configuration file.
+The system supports both HTTP and HTTPS protocols and automatically reloads the server list every 5 seconds from a configuration file.
 
 ## Features
 
@@ -20,8 +20,8 @@ The system can handle a large number of connections and automatically reloads th
 
 ## Prerequisites
 
-- **Go 1.18+**: Ensure Go is installed on your machine. Download it from [golang.org](https://golang.org/dl/).
-- **SSL Certificates**: For HTTPS support, you'll need SSL certificate files.
+- **Go 1.18+**: Ensure Go is installed. Download from [golang.org](https://golang.org/dl/).
+- **SSL Certificates**: Required for HTTPS support. Generate or obtain valid SSL certificates.
 
 ## Installation
 
@@ -40,7 +40,7 @@ The system can handle a large number of connections and automatically reloads th
 
 3. **Generate SSL Certificates (for HTTPS)**
 
-   If you don't have SSL certificates, generate self-signed certificates for testing:
+   If you don’t have SSL certificates, generate self-signed certificates for testing:
 
    ```sh
    openssl req -newkey rsa:2048 -nodes -keyout server.key -x509 -days 365 -out server.crt
@@ -52,33 +52,40 @@ The system can handle a large number of connections and automatically reloads th
 
 1. **Server List Configuration**
 
-   Create a `servers.conf` file in the project directory. This file should list the backend servers with optional weights, one per line:
+   Create a `servers.conf` file in the project directory with the following format:
 
    ```
-   <server_address>:<weight>
+   <IP>:<Port>:<Weight>
    ```
 
    Example `servers.conf`:
 
    ```
-   192.168.1.1:10
-   192.168.1.2:5
-   192.168.1.3
+   10.220.3.1:23252:10
+   10.220.3.2:12422:5
+   10.220.3.3:54322:15
    ```
 
-   - `<server_address>`: The IP address or hostname of the backend server.
-   - `<weight>`: (Optional) The weight of the server for the Weighted Round Robin algorithm.
+   - `<IP>`: The IP address of the backend server.
+   - `<Port>`: The port number of the backend server.
+   - `<Weight>`: (Optional) The weight of the server for Weighted Round Robin.
 
 2. **Load Balancing Algorithm**
 
-   Edit the `algorithm` field in the `main()` function of `main.go` to select the load balancing algorithm:
+   Update the `algorithm` field in the `main()` function of `main.go` to select the load balancing algorithm:
 
    - `"round_robin"`
    - `"least_connections"`
    - `"weighted_round_robin"`
-   - `"ip_hash"`
+   - `"ip_hash"` (Placeholder for future implementation)
 
-   *Note: IP Hashing is a placeholder for future implementation.*
+   *Example for Round Robin:*
+
+   ```go
+   lb := &LoadBalancer{
+       algorithm: "round_robin",
+   }
+   ```
 
 ## Usage
 
@@ -93,31 +100,54 @@ The system can handle a large number of connections and automatically reloads th
    The load balancer will start two servers:
 
    - **HTTP**: Listens on port `8080`
-   - **HTTPS**: Listens on port `8443`
+   - **HTTPS**: Listens on port `443`
 
 2. **Sending Requests**
 
    - **HTTP Requests**: Use the HTTP port for regular requests:
-   
+
      ```sh
      curl http://localhost:8080/your-endpoint
      ```
 
-   - **HTTPS Requests**: Use the HTTPS port for secure requests. You may need to bypass SSL certificate validation for self-signed certificates:
-   
+   - **HTTPS Requests**: Use the HTTPS port for secure requests. If using self-signed certificates, bypass SSL verification:
+
      ```sh
-     curl https://localhost:8443/your-endpoint --insecure
+     curl https://localhost:443/your-endpoint --insecure
      ```
 
 3. **Automatic Server List Reload**
 
    The system will automatically reload the server list every 5 seconds. Ensure `servers.conf` is updated with the latest backend servers as needed.
 
-## Notes
+## Deployment
 
-- **SSL Certificates**: For production, use certificates from a trusted Certificate Authority (CA). Update the `server.crt` and `server.key` file names in the code if different.
-- **Firewall and Network Configuration**: Ensure the ports used (8080 for HTTP and 8443 for HTTPS) are open and accessible.
-- **Scaling**: The load balancer is designed for high concurrency, but ensure your backend servers and infrastructure can handle the load.
+1. **Configure DNS**
+
+   - Update the DNS settings for `lowlevelforest.com` to point to the IP address of your load balancer server.
+   - Ensure both HTTP (port 8080) and HTTPS (port 443) are routed to the load balancer.
+
+2. **Firewall and Network Configuration**
+
+   - Open the required ports on your firewall:
+     - Port `8080` for HTTP
+     - Port `443` for HTTPS
+
+   - Secure your server by disabling unused services and keeping your system updated.
+
+## Monitoring and Maintenance
+
+1. **Monitor Logs**
+
+   - Regularly check logs for errors or issues. Ensure logging is set up to capture operational metrics.
+
+2. **Update Server List**
+
+   - Modify `servers.conf` as needed to add or remove backend servers. The load balancer will automatically reload the configuration.
+
+3. **Regular Maintenance**
+
+   - Perform regular updates and maintenance on the load balancer and backend servers to ensure stability and security.
 
 ## Contributing
 
@@ -130,18 +160,18 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Contact
 
 For questions or further information, please contact [LowLevelForest](mailto:lowlevelforest@gmail.com).
-
 ```
 
 ### Key Sections:
 
-- **Overview**: Provides a brief description of the load balancer and its features.
-- **Features**: Lists the capabilities of the system.
-- **Prerequisites**: Details the requirements to run the system.
-- **Installation**: Step-by-step guide for cloning the repo, building the application, and generating SSL certificates.
-- **Configuration**: Instructions for setting up the `servers.conf` file and selecting the load balancing algorithm.
-- **Usage**: How to run the application and send requests.
-- **Notes**: Additional considerations and tips for production use.
-- **Contributing**: Encourages community involvement.
-- **License**: License details.
-- **Contact**: Provides a way to reach out for further information.
+- **Overview**: Describes the load balancer system and its features.
+- **Features**: Lists capabilities including dual protocol support and scalability.
+- **Prerequisites**: Lists the required tools and SSL certificates.
+- **Installation**: Instructions for cloning the repository, building the application, and generating SSL certificates.
+- **Configuration**: Details the `servers.conf` file format and how to choose the load balancing algorithm.
+- **Usage**: How to run the application, send requests, and manage automatic server list reloading.
+- **Deployment**: Instructions for configuring DNS, firewall, and network settings.
+- **Monitoring and Maintenance**: Guidelines for log monitoring, server list updates, and regular maintenance.
+- **Contributing**: Encourages contributions.
+- **License**: Licensing details.
+- **Contact**: Contact information for further inquiries.
